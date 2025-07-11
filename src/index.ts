@@ -4,6 +4,7 @@ import {
   logAgentDetails,
   validateEnvironment,
 } from "./helpers/client.js";
+import { getWalletAddressFromInboxId } from "./helpers/utils.js";
 import { Client, type XmtpEnv } from "@xmtp/node-sdk";
 import { 
   handleTextMessage, 
@@ -16,6 +17,24 @@ const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV, NETWORK_ID } = validateEnvironment
   "XMTP_ENV",
   "NETWORK_ID",
 ]);
+
+// Interface for tracking message history
+interface MessageRecord {
+  senderInboxId: string;
+  senderAddress: string;
+  timestamp: Date;
+  conversationId: string;
+  messageContent?: string;
+  contentType: string;
+}
+
+// Interface for tracking agent responses
+interface AgentResponse {
+  senderInboxId: string;
+  senderAddress: string;
+  lastResponseTime: Date;
+  conversationId: string;
+}
 
 async function main() {
   console.log("🚀 Starting Agent Health Check...");
@@ -46,7 +65,32 @@ async function main() {
     const activeConversations = new Set<string>();
     
     // Broadcasting control - starts disabled
-    const broadcastingControl = { isActive: false };
+    const broadcastingControl = { isActive: true };
+    
+    // Message tracking - store message history
+    const messageHistory: MessageRecord[] = [];
+    
+    // Track unique senders by wallet address
+    const uniqueSenders = new Set<string>();
+    const uniqueWalletAddresses = new Set<string>();
+    
+    // Track agent responses to each sender
+    const agentResponses = new Map<string, AgentResponse>();
+    
+    // Function to update agent response tracking
+    const updateAgentResponse = (senderInboxId: string, senderAddress: string, conversationId: string) => {
+      const existingResponse = agentResponses.get(senderInboxId);
+      if (existingResponse) {
+        existingResponse.lastResponseTime = new Date();
+      } else {
+        agentResponses.set(senderInboxId, {
+          senderInboxId,
+          senderAddress,
+          lastResponseTime: new Date(),
+          conversationId,
+        });
+      }
+    };
     
     // Set up GM broadcasting every 30 seconds
     const gmInterval = setInterval(async () => {
@@ -62,6 +106,13 @@ async function main() {
           if (conversation) {
             await conversation.send("GM");
             console.log(`✅ Sent GM to conversation: ${conversationId}`);
+            
+            // Find the senderInboxId for this conversation from message history
+            const conversationMessages = messageHistory.filter(msg => msg.conversationId === conversationId);
+            if (conversationMessages.length > 0) {
+              const latestMessage = conversationMessages[conversationMessages.length - 1];
+              updateAgentResponse(latestMessage.senderInboxId, latestMessage.senderAddress, conversationId);
+            }
           }
         } catch (error) {
           console.error(`❌ Failed to send GM to conversation ${conversationId}:`, error);
@@ -83,9 +134,44 @@ async function main() {
               continue;
             }
 
+            // Get sender address early for display purposes
+            const senderAddress = await getWalletAddressFromInboxId(client, message.senderInboxId);
+            
+            if (!senderAddress) {
+              console.log("❌ Unable to find sender address, skipping");
+              continue;
+            }
+
+            // Track message details
+            const messageRecord: MessageRecord = {
+              senderInboxId: message.senderInboxId,
+              senderAddress: senderAddress,
+              timestamp: new Date(),
+              conversationId: message.conversationId,
+              messageContent: message.contentType?.typeId === "text" ? message.content as string : undefined,
+              contentType: message.contentType?.typeId || "unknown"
+            };
+            
+            // Add to message history
+            messageHistory.push(messageRecord);
+            
+            // Track unique senders
+            const isNewSender = !uniqueSenders.has(message.senderInboxId);
+            const isNewWalletAddress = !uniqueWalletAddresses.has(senderAddress);
+            uniqueSenders.add(message.senderInboxId);
+            uniqueWalletAddresses.add(senderAddress);
+            
             console.log(
-              `📨 Received: ${message.contentType?.typeId} from ${message.senderInboxId}`
+              `📨 Received: ${message.contentType?.typeId} from ${senderAddress} at ${messageRecord.timestamp.toISOString()}`
             );
+            
+            // Log new sender information
+            if (isNewSender) {
+              console.log(`🆕 New sender detected: ${senderAddress}`);
+            }
+            
+            // Log message tracking stats
+            console.log(`📊 Message tracking stats: ${messageHistory.length} total messages from ${uniqueWalletAddresses.size} unique wallet addresses`);
 
             const conversation = await client.conversations.getConversationById(
               message.conversationId
@@ -99,24 +185,20 @@ async function main() {
             // Add conversation to active set for GM broadcasting
             activeConversations.add(message.conversationId);
 
-            // Get sender address
-            const inboxState = await client.preferences.inboxStateFromInboxIds([
-              message.senderInboxId,
-            ]);
-            const senderAddress = inboxState[0]?.identifiers[0]?.identifier;
-            
-            if (!senderAddress) {
-              console.log("❌ Unable to find sender address, skipping");
-              continue;
-            }
-
             // Handle different message types
             if (message.contentType?.typeId === "text") {
-              await handleTextMessage(
+              const responsePromise = handleTextMessage(
                 conversation,
                 message.content as string,
-                broadcastingControl
+                broadcastingControl,
+                messageHistory,
+                uniqueSenders,
+                agentResponses
               );
+              
+              // Update agent response tracking after handling the message
+              await responsePromise;
+              updateAgentResponse(message.senderInboxId, senderAddress, message.conversationId);
             }
           } catch (messageError: unknown) {
             const errorMessage = messageError instanceof Error ? messageError.message : String(messageError);
@@ -125,10 +207,15 @@ async function main() {
               const conversation = await client.conversations.getConversationById(
                 message?.conversationId || ""
               );
-              if (conversation) {
+              if (conversation && message) {
                 await conversation.send(
                   `❌ Error processing message: ${errorMessage}`
                 );
+                // Update response tracking for error messages too
+                const errorSenderAddress = await getWalletAddressFromInboxId(client, message.senderInboxId);
+                if (errorSenderAddress) {
+                  updateAgentResponse(message.senderInboxId, errorSenderAddress, message.conversationId);
+                }
               }
             } catch (sendError) {
               console.error("❌ Failed to send error message to conversation:", sendError);

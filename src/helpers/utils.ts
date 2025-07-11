@@ -1,3 +1,26 @@
+import { type Client } from "@xmtp/node-sdk";
+
+/**
+ * Convert senderInboxId to wallet address
+ * @param client - The XMTP client instance
+ * @param senderInboxId - The sender's inbox ID
+ * @returns The wallet address or null if not found
+ */
+export async function getWalletAddressFromInboxId(
+  client: Client,
+  senderInboxId: string
+): Promise<string | null> {
+  try {
+    const inboxState = await client.preferences.inboxStateFromInboxIds([
+      senderInboxId,
+    ]);
+    return inboxState[0]?.identifiers[0]?.identifier || null;
+  } catch (error) {
+    console.error(`❌ Failed to get wallet address for inbox ID ${senderInboxId}:`, error);
+    return null;
+  }
+}
+
 export function getExplorerUrl(txHash: string, networkId: string): string {
   // Handle hex chain IDs
   const chainId = networkId.startsWith('0x') ? parseInt(networkId, 16) : networkId;
