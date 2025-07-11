@@ -42,6 +42,35 @@ async function main() {
 
     console.log("👂 Listening for messages...");
     
+    // Track active conversations for GM broadcasting
+    const activeConversations = new Set<string>();
+    
+    // Broadcasting control - starts disabled
+    const broadcastingControl = { isActive: false };
+    
+    // Set up GM broadcasting every 30 seconds
+    const gmInterval = setInterval(async () => {
+      if (!broadcastingControl.isActive) {
+        return; // Skip broadcasting if not active
+      }
+      
+      console.log("📢 Broadcasting GM to active conversations...");
+      
+      for (const conversationId of activeConversations) {
+        try {
+          const conversation = await client.conversations.getConversationById(conversationId);
+          if (conversation) {
+            await conversation.send("GM");
+            console.log(`✅ Sent GM to conversation: ${conversationId}`);
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send GM to conversation ${conversationId}:`, error);
+          // Remove failed conversation from active set
+          activeConversations.delete(conversationId);
+        }
+      }
+    }, 30000); // 30 seconds
+    
     // Keep the bot running with proper error handling
     while (true) {
       try {
@@ -67,6 +96,9 @@ async function main() {
               continue;
             }
 
+            // Add conversation to active set for GM broadcasting
+            activeConversations.add(message.conversationId);
+
             // Get sender address
             const inboxState = await client.preferences.inboxStateFromInboxIds([
               message.senderInboxId,
@@ -83,6 +115,7 @@ async function main() {
               await handleTextMessage(
                 conversation,
                 message.content as string,
+                broadcastingControl
               );
             }
           } catch (messageError: unknown) {
@@ -123,8 +156,6 @@ async function main() {
     process.exit(1);
   }
 }
-
-
 
 // Handle graceful shutdown
 process.on("SIGINT", () => {
