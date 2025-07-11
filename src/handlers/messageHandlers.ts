@@ -1,4 +1,4 @@
-import { getBasename, getAddressProfile } from "../helpers/basenames.js";
+import { getBasename } from "../helpers/basenames.js";
 import type { Address } from "viem";
 
 // Interface for tracking message history
@@ -26,39 +26,19 @@ async function getDisplayName(address: string): Promise<string> {
   try {
     const basename = await getBasename(address as Address);
     if (basename) {
+      console.log(`Using basename ${basename} for address ${address}`);
       return basename;
+    } else {
+      console.log(`No basename found for ${address}, using shortened address`);
     }
   } catch (error) {
     console.error("Error getting basename for address:", address, error);
   }
   
   // Fallback to shortened address
-  return `${address.substring(0, 8)}...${address.slice(-6)}`;
-}
-
-/**
- * Get profile info for an address
- */
-async function getProfileInfo(address: string): Promise<{
-  displayName: string;
-  profile: any;
-}> {
-  try {
-    const profile = await getAddressProfile(address as Address);
-    if (profile) {
-      return {
-        displayName: profile.basename!,
-        profile: profile
-      };
-    }
-  } catch (error) {
-    console.error("Error getting profile for address:", address, error);
-  }
-  
-  return {
-    displayName: await getDisplayName(address),
-    profile: null
-  };
+  const shortened = `${address.substring(0, 8)}...${address.slice(-6)}`;
+  console.log(`Using shortened address ${shortened} for ${address}`);
+  return shortened;
 }
 
 export async function handleTextMessage(
@@ -213,7 +193,7 @@ ${topSenders.join('\n') || '  No senders yet'}`;
         
         const reportMessage = `📋 **Agent Response Report**
 
-🤖 Agent Status by Wallet Address:
+🤖 Agent Status:
 ${reportLines.join('\n')}
 
 Legend:
@@ -221,7 +201,7 @@ Legend:
 🟡 Recent (30s - 1m ago)  
 🔴 Inactive (> 1m ago)
 
-Total Active Conversations: ${responses.length}`;
+Total Agents: ${responses.length}`;
 
         await conversation.send(reportMessage);
       } else {
@@ -238,29 +218,6 @@ Total Active Conversations: ${responses.length}`;
       // This will depend on your conversation structure
       if (participants.length > 0) {
         requestingAddress = participants[0]; // This may need adjustment based on your conversation structure
-      }
-      
-      if (requestingAddress) {
-        const { displayName, profile } = await getProfileInfo(requestingAddress);
-        
-        if (profile) {
-          const profileMessage = `👤 **Your Profile**
-
-🏷️ Basename: ${profile.basename}
-📍 Address: ${profile.address}
-${profile.description ? `📝 Description: ${profile.description}` : ''}
-${profile['com.twitter'] ? `🐦 Twitter: @${profile['com.twitter']}` : ''}
-${profile['com.github'] ? `💻 GitHub: ${profile['com.github']}` : ''}
-${profile['com.discord'] ? `💬 Discord: ${profile['com.discord']}` : ''}
-${profile.email ? `📧 Email: ${profile.email}` : ''}
-${profile.url ? `🌐 Website: ${profile.url}` : ''}`;
-          
-          await conversation.send(profileMessage);
-        } else {
-          await conversation.send(`👤 **Your Profile**\n\n📍 Address: ${displayName}\n\n💡 You don't have a Basename yet! Get one at https://www.base.org/names`);
-        }
-      } else {
-        await conversation.send("❌ Could not determine your address.");
       }
       break;
 
