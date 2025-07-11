@@ -1,3 +1,6 @@
+import { getBasename, getAddressProfile } from "../helpers/basenames.js";
+import type { Address } from "viem";
+
 // Interface for tracking message history
 interface MessageRecord {
   senderInboxId: string;
@@ -14,6 +17,48 @@ interface AgentResponse {
   senderAddress: string;
   lastResponseTime: Date;
   conversationId: string;
+}
+
+/**
+ * Get display name for an address - basename if available, otherwise shortened address
+ */
+async function getDisplayName(address: string): Promise<string> {
+  try {
+    const basename = await getBasename(address as Address);
+    if (basename) {
+      return basename;
+    }
+  } catch (error) {
+    console.error("Error getting basename for address:", address, error);
+  }
+  
+  // Fallback to shortened address
+  return `${address.substring(0, 8)}...${address.slice(-6)}`;
+}
+
+/**
+ * Get profile info for an address
+ */
+async function getProfileInfo(address: string): Promise<{
+  displayName: string;
+  profile: any;
+}> {
+  try {
+    const profile = await getAddressProfile(address as Address);
+    if (profile) {
+      return {
+        displayName: profile.basename!,
+        profile: profile
+      };
+    }
+  } catch (error) {
+    console.error("Error getting profile for address:", address, error);
+  }
+  
+  return {
+    displayName: await getDisplayName(address),
+    profile: null
+  };
 }
 
 export async function handleTextMessage(
@@ -70,10 +115,13 @@ export async function handleTextMessage(
         const totalSenders = uniqueWalletAddresses.size;
         const broadcastStatus = broadcastingControl?.isActive ? "🟢 Active" : "🔴 Inactive";
         
-        // Get recent messages (last 5)
-        const recentMessages = messageHistory.slice(-5).map(record => 
-          `  • ${record.senderAddress.substring(0, 8)}...${record.senderAddress.slice(-6)} at ${record.timestamp.toLocaleString()}`
-        ).join('\n');
+        // Get recent messages (last 5) with basename resolution
+        const recentMessages = await Promise.all(
+          messageHistory.slice(-5).map(async (record) => {
+            const displayName = await getDisplayName(record.senderAddress);
+            return `  • ${displayName} at ${record.timestamp.toLocaleString()}`;
+          })
+        );
         
         // Get sender frequency by wallet address
         const senderCount = new Map<string, number>();
@@ -81,11 +129,16 @@ export async function handleTextMessage(
           senderCount.set(record.senderAddress, (senderCount.get(record.senderAddress) || 0) + 1);
         });
         
-        const topSenders = Array.from(senderCount.entries())
+        const topSendersData = Array.from(senderCount.entries())
           .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(([senderAddress, count]) => `  • ${senderAddress.substring(0, 8)}...${senderAddress.slice(-6)}: ${count} messages`)
-          .join('\n');
+          .slice(0, 3);
+        
+        const topSenders = await Promise.all(
+          topSendersData.map(async ([senderAddress, count]) => {
+            const displayName = await getDisplayName(senderAddress);
+            return `  • ${displayName}: ${count} messages`;
+          })
+        );
 
         const statsMessage = `📊 **Message Tracking Stats**
 
@@ -94,10 +147,10 @@ export async function handleTextMessage(
 📡 GM Broadcasting: ${broadcastStatus}
 
 🕐 Recent Messages:
-${recentMessages || '  No messages yet'}
+${recentMessages.join('\n') || '  No messages yet'}
 
 🔝 Top Senders:
-${topSenders || '  No senders yet'}`;
+${topSenders.join('\n') || '  No senders yet'}`;
 
         await conversation.send(statsMessage);
       } else {
@@ -148,18 +201,20 @@ ${topSenders || '  No senders yet'}`;
         // Sort responses by most recent first
         responses.sort((a, b) => b.lastResponseTime.getTime() - a.lastResponseTime.getTime());
         
-        const reportLines = responses.map(response => {
-          const status = getStatusIndicator(response.lastResponseTime);
-          const timeDiff = getTimeDifference(response.lastResponseTime);
-          const walletAddress = `${response.senderAddress.substring(0, 8)}...${response.senderAddress.slice(-6)}`;
-          
-          return `  ${status} ${walletAddress} - ${timeDiff}`;
-        }).join('\n');
+        const reportLines = await Promise.all(
+          responses.map(async (response) => {
+            const status = getStatusIndicator(response.lastResponseTime);
+            const timeDiff = getTimeDifference(response.lastResponseTime);
+            const displayName = await getDisplayName(response.senderAddress);
+            
+            return `  ${status} ${displayName} - ${timeDiff}`;
+          })
+        );
         
         const reportMessage = `📋 **Agent Response Report**
 
 🤖 Agent Status by Wallet Address:
-${reportLines}
+${reportLines.join('\n')}
 
 Legend:
 🟢 Active (< 30s ago)
@@ -171,6 +226,41 @@ Total Active Conversations: ${responses.length}`;
         await conversation.send(reportMessage);
       } else {
         await conversation.send("❌ Agent response tracking not available.");
+      }
+      break;
+
+    case command === '/profile':
+      // Get the conversation participants to determine who's asking
+      const participants = conversation.members || [];
+      let requestingAddress = null;
+      
+      // Try to find the requesting address from conversation context
+      // This will depend on your conversation structure
+      if (participants.length > 0) {
+        requestingAddress = participants[0]; // This may need adjustment based on your conversation structure
+      }
+      
+      if (requestingAddress) {
+        const { displayName, profile } = await getProfileInfo(requestingAddress);
+        
+        if (profile) {
+          const profileMessage = `👤 **Your Profile**
+
+🏷️ Basename: ${profile.basename}
+📍 Address: ${profile.address}
+${profile.description ? `📝 Description: ${profile.description}` : ''}
+${profile['com.twitter'] ? `🐦 Twitter: @${profile['com.twitter']}` : ''}
+${profile['com.github'] ? `💻 GitHub: ${profile['com.github']}` : ''}
+${profile['com.discord'] ? `💬 Discord: ${profile['com.discord']}` : ''}
+${profile.email ? `📧 Email: ${profile.email}` : ''}
+${profile.url ? `🌐 Website: ${profile.url}` : ''}`;
+          
+          await conversation.send(profileMessage);
+        } else {
+          await conversation.send(`👤 **Your Profile**\n\n📍 Address: ${displayName}\n\n💡 You don't have a Basename yet! Get one at https://www.base.org/names`);
+        }
+      } else {
+        await conversation.send("❌ Could not determine your address.");
       }
       break;
 

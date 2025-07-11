@@ -5,10 +5,12 @@ import {
   validateEnvironment,
 } from "./helpers/client.js";
 import { getWalletAddressFromInboxId } from "./helpers/utils.js";
+import { getBasename } from "./helpers/basenames.js";
 import { Client, type XmtpEnv } from "@xmtp/node-sdk";
 import { 
   handleTextMessage, 
 } from "./handlers/messageHandlers.js";
+import type { Address } from "viem";
 
 // Validate required environment variables
 const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV, NETWORK_ID } = validateEnvironment([
@@ -77,6 +79,19 @@ async function main() {
     // Track agent responses to each sender
     const agentResponses = new Map<string, AgentResponse>();
     
+    // Helper function to get display name for logging
+    const getDisplayNameForLogging = async (address: string): Promise<string> => {
+      try {
+        const basename = await getBasename(address as Address);
+        if (basename) {
+          return `${basename} (${address})`;
+        }
+      } catch (error) {
+        // Silently handle errors for logging
+      }
+      return address;
+    };
+    
     // Function to update agent response tracking
     const updateAgentResponse = (senderInboxId: string, senderAddress: string, conversationId: string) => {
       const existingResponse = agentResponses.get(senderInboxId);
@@ -142,6 +157,9 @@ async function main() {
               continue;
             }
 
+            // Get display name for logging
+            const displayName = await getDisplayNameForLogging(senderAddress);
+
             // Track message details
             const messageRecord: MessageRecord = {
               senderInboxId: message.senderInboxId,
@@ -162,12 +180,12 @@ async function main() {
             uniqueWalletAddresses.add(senderAddress);
             
             console.log(
-              `📨 Received: ${message.contentType?.typeId} from ${senderAddress} at ${messageRecord.timestamp.toISOString()}`
+              `📨 Received: ${message.contentType?.typeId} from ${displayName} at ${messageRecord.timestamp.toISOString()}`
             );
             
             // Log new sender information
             if (isNewSender) {
-              console.log(`🆕 New sender detected: ${senderAddress}`);
+              console.log(`🆕 New sender detected: ${displayName}`);
             }
             
             // Log message tracking stats
