@@ -8,7 +8,7 @@ import {
     namehash,
   } from "viem";
   import { base, mainnet } from "viem/chains";
-  import L2ResolverAbi from "../abis/L2ResolverAbi";
+  import L2ResolverAbi from "../abis/L2ResolverAbi.js";
   
   export type Basename = `${string}.base.eth`;
   
