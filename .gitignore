@@ -68,3 +68,6 @@ jspm_packages/
 
 # Railway
 .railway/ 
+
+# db stuff
+*.db3*

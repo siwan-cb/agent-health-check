@@ -4,27 +4,10 @@ import {
   logAgentDetails,
   validateEnvironment,
 } from "./helpers/client.js";
-import { TokenHandler } from "./handlers/tokenHandler.js";
-import { 
-  TransactionReferenceCodec,
-  type TransactionReference 
-} from "@xmtp/content-type-transaction-reference";
-import {
-  WalletSendCallsCodec,
-} from "@xmtp/content-type-wallet-send-calls";
 import { Client, type XmtpEnv } from "@xmtp/node-sdk";
-import {
-  ActionsCodec,
-} from "./types/ActionsContent.js";
-import {
-  IntentCodec,
-  type IntentContent,
-} from "./types/IntentContent.js";
 import { 
   handleTextMessage, 
-  handleIntentMessage 
 } from "./handlers/messageHandlers.js";
-import { handleTransactionReference } from "./handlers/transactionHandlers.js";
 
 // Validate required environment variables
 const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV, NETWORK_ID } = validateEnvironment([
@@ -35,14 +18,9 @@ const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV, NETWORK_ID } = validateEnvironment
 ]);
 
 async function main() {
-  console.log("🚀 Starting TBA Chat Example Bot...");
+  console.log("🚀 Starting Agent Health Check...");
   
   try {
-    // Initialize token handler
-    const tokenHandler = new TokenHandler(NETWORK_ID);
-    console.log(`📡 Connected to network: ${tokenHandler.getNetworkInfo().name}`);
-    console.log(`💰 Supported tokens: ${tokenHandler.getSupportedTokens().join(", ")}`);
-
     // Create XMTP client
     const signer = createSigner(WALLET_KEY);
     const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
@@ -50,7 +28,7 @@ async function main() {
     const client = await Client.create(signer, {
       dbEncryptionKey,
       env: XMTP_ENV as XmtpEnv,
-      codecs: [new WalletSendCallsCodec(), new TransactionReferenceCodec(), new ActionsCodec(), new IntentCodec()],
+      codecs: [],
     });
 
     const identifier = await signer.getIdentifier();
@@ -105,31 +83,7 @@ async function main() {
               await handleTextMessage(
                 conversation,
                 message.content as string,
-                senderAddress,
-                agentAddress,
-                tokenHandler
               );
-            } else if (message.contentType?.typeId === "transactionReference") {
-              console.log("🧾 Detected transaction reference message");
-              console.log("📋 Raw message content:", JSON.stringify(message.content, null, 2));
-              await handleTransactionReference(
-                conversation,
-                message.content as TransactionReference,
-                senderAddress,
-                tokenHandler
-              );
-            } else if (message.contentType?.typeId === "intent") {
-              console.log("🎯 Detected intent message");
-              console.log("📋 Raw intent content:", JSON.stringify(message.content, null, 2));
-              await handleIntentMessage(
-                conversation,
-                message.content as IntentContent,
-                senderAddress,
-                agentAddress,
-                tokenHandler
-              );
-            } else {
-              continue;
             }
           } catch (messageError: unknown) {
             const errorMessage = messageError instanceof Error ? messageError.message : String(messageError);
@@ -174,12 +128,12 @@ async function main() {
 
 // Handle graceful shutdown
 process.on("SIGINT", () => {
-  console.log("\n👋 Shutting down TBA Chat Example Bot...");
+  console.log("\n👋 Shutting down Agent Health Check...");
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
-  console.log("\n👋 Shutting down TBA Chat Example Bot...");
+  console.log("\n👋 Shutting down Agent Health Check...");
   process.exit(0);
 });
 
