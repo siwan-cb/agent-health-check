@@ -107,20 +107,20 @@ async function main() {
       }
     };
     
-    // Set up GM broadcasting every 30 seconds
-    const gmInterval = setInterval(async () => {
+    // Set up @bankr /help broadcasting every 30 seconds
+    const broadcastInterval = setInterval(async () => {
       if (!broadcastingControl.isActive) {
         return; // Skip broadcasting if not active
       }
       
-      console.log("📢 Broadcasting GM to active conversations...");
+      console.log("📢 Broadcasting @bankr /help to active conversations...");
       
       for (const conversationId of activeConversations) {
         try {
           const conversation = await client.conversations.getConversationById(conversationId);
           if (conversation) {
-            await conversation.send("GM");
-            console.log(`✅ Sent GM to conversation: ${conversationId}`);
+            await conversation.send("@bankr @mamo.base.eth /help");
+            console.log(`✅ Sent @bankr /help to conversation: ${conversationId}`);
             
             // Find the senderInboxId for this conversation from message history
             const conversationMessages = messageHistory.filter(msg => msg.conversationId === conversationId);
@@ -130,7 +130,7 @@ async function main() {
             }
           }
         } catch (error) {
-          console.error(`❌ Failed to send GM to conversation ${conversationId}:`, error);
+          console.error(`❌ Failed to send @bankr /help to conversation ${conversationId}:`, error);
           // Remove failed conversation from active set
           activeConversations.delete(conversationId);
         }
