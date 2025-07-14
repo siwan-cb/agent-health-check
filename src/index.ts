@@ -20,6 +20,9 @@ const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV, NETWORK_ID } = validateEnvironment
   "NETWORK_ID",
 ]);
 
+// Address to skip tracking for
+const SKIP_TRACKING_ADDRESS = "0xA5A79Fb7E772b51B12200B2f6282b1beE36dC3cE";
+
 // Interface for tracking message history
 interface MessageRecord {
   senderInboxId: string;
@@ -113,24 +116,32 @@ async function main() {
         return; // Skip broadcasting if not active
       }
       
-      console.log("📢 Broadcasting /status /ping to active conversations...");
+      console.log("📢 Broadcasting ping and GM to active conversations...");
       
       for (const conversationId of activeConversations) {
         try {
           const conversation = await client.conversations.getConversationById(conversationId);
           if (conversation) {
-            await conversation.send("/status");
-            console.log(`✅ Sent /status /ping to conversation: ${conversationId}`);
-            
             // Find the senderInboxId for this conversation from message history
             const conversationMessages = messageHistory.filter(msg => msg.conversationId === conversationId);
             if (conversationMessages.length > 0) {
               const latestMessage = conversationMessages[conversationMessages.length - 1];
+              
+              // Skip broadcasting to excluded address
+              if (latestMessage.senderAddress.toLowerCase() === SKIP_TRACKING_ADDRESS.toLowerCase()) {
+                console.log(`🚫 Skipping broadcast to excluded address: ${latestMessage.senderAddress}`);
+                continue;
+              }
+              
+              await conversation.send("ping");
+              await conversation.send("GM");
+              console.log(`✅ Sent ping and GM to conversation: ${conversationId}`);
+              
               updateAgentResponse(latestMessage.senderInboxId, latestMessage.senderAddress, conversationId);
             }
           }
         } catch (error) {
-          console.error(`❌ Failed to send /status /ping to conversation ${conversationId}:`, error);
+          console.error(`❌ Failed to send ping and GM to conversation ${conversationId}:`, error);
           // Remove failed conversation from active set
           activeConversations.delete(conversationId);
         }
@@ -154,6 +165,28 @@ async function main() {
             
             if (!senderAddress) {
               console.log("❌ Unable to find sender address, skipping");
+              continue;
+            }
+
+            // Skip tracking for specific address
+            if (senderAddress.toLowerCase() === SKIP_TRACKING_ADDRESS.toLowerCase()) {
+              console.log(`🚫 Skipping tracking for address: ${senderAddress}`);
+              
+              // Still handle the message but don't track it
+              const conversation = await client.conversations.getConversationById(
+                message.conversationId
+              );
+
+              if (conversation && message.contentType?.typeId === "text") {
+                await handleTextMessage(
+                  conversation,
+                  message.content as string,
+                  broadcastingControl,
+                  messageHistory,
+                  uniqueSenders,
+                  agentResponses
+                );
+              }
               continue;
             }
 

@@ -56,14 +56,15 @@ export async function handleTextMessage(
   switch (true) {
     case command === '/start':
       if (broadcastingControl) {
-        // Send immediate GM
-        await conversation.send("/ping");
+        // Send immediate ping and GM
+        await conversation.send("ping");
+        await conversation.send("GM");
         
         // Enable broadcasting
         broadcastingControl.isActive = true;
         
         // Send confirmation message
-        await conversation.send("🚀 Ping broadcasting started! I'll send ping every 30 seconds.");
+        await conversation.send("🚀 Ping and GM broadcasting started! I'll send ping and GM every 2 minutes.");
       } else {
         await conversation.send("❌ Broadcasting control not available.");
       }
@@ -72,7 +73,7 @@ export async function handleTextMessage(
     case command === '/stop':
       if (broadcastingControl) {
         broadcastingControl.isActive = false;
-        await conversation.send("🛑 Ping broadcasting stopped.");
+        await conversation.send("🛑 Ping and GM broadcasting stopped.");
       } else {
         await conversation.send("❌ Broadcasting control not available.");
       }
@@ -81,7 +82,7 @@ export async function handleTextMessage(
     case command === '/status':
       if (broadcastingControl) {
         const status = broadcastingControl.isActive ? "🟢 Active" : "🔴 Inactive";
-        const statusMessage = `📡 **Broadcasting Status**\n\nPing Broadcasting: ${status}`;
+        const statusMessage = `📡 **Broadcasting Status**\n\nPing & GM Broadcasting: ${status}`;
         await conversation.send(statusMessage);
       } else {
         await conversation.send("❌ Broadcasting control not available.");
@@ -124,7 +125,7 @@ export async function handleTextMessage(
 
 🔢 Total Messages: ${totalMessages}
 👥 Unique Wallet Addresses: ${totalSenders}
-📡 Ping Broadcasting: ${broadcastStatus}
+📡 Ping & GM Broadcasting: ${broadcastStatus}
 
 🕐 Recent Messages:
 ${recentMessages.join('\n') || '  No messages yet'}
