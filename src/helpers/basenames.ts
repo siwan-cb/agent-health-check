@@ -15,6 +15,10 @@ import {
   export const BASENAME_L2_RESOLVER_ADDRESS =
     "0xC6d566A56A1aFf6508b41f6c90ff131615583BCD";
   
+  // Cache for basename resolution
+  const basenameCache = new Map<string, { basename: Basename | null; timestamp: number }>();
+  const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+  
   export enum BasenameTextRecordKeys {
     Description = "description",
     Keywords = "keywords",
@@ -46,9 +50,23 @@ import {
   ];
   
   const baseClient = createPublicClient({
-    chain: base,
-    transport: http("https://mainnet.base.org"),
-  });
+  chain: base,
+  transport: http("https://mainnet.base.org", {
+    retryCount: 3,
+    retryDelay: 1000,
+    timeout: 10000,
+  }),
+});
+
+// Fallback client with different RPC endpoint
+const fallbackBaseClient = createPublicClient({
+  chain: base,
+  transport: http("https://base.llamarpc.com", {
+    retryCount: 2,
+    retryDelay: 1000,
+    timeout: 10000,
+  }),
+});
   
   export async function getBasenameAvatar(basename: Basename) {
     const avatar = await baseClient.getEnsAvatar({
@@ -132,20 +150,65 @@ import {
   
   export async function getBasename(address: Address) {
   try {
+    // Check cache first
+    const cacheKey = address.toLowerCase();
+    const cached = basenameCache.get(cacheKey);
+    
+    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION_MS) {
+      return cached.basename;
+    }
+    
     const addressReverseNode = convertReverseNodeToBytes(address, base.id);
-    const basename = await baseClient.readContract({
-      abi: L2ResolverAbi,
-      address: BASENAME_L2_RESOLVER_ADDRESS,
-      functionName: "name",
-      args: [addressReverseNode],
+    let basename: string | null = null;
+    
+    // Try primary client first
+    try {
+      basename = await baseClient.readContract({
+        abi: L2ResolverAbi,
+        address: BASENAME_L2_RESOLVER_ADDRESS,
+        functionName: "name",
+        args: [addressReverseNode],
+      });
+    } catch (primaryError: any) {
+      // If primary client fails with rate limiting, try fallback
+      if (primaryError?.message?.includes("rate limit") || primaryError?.status === 429) {
+        console.log(`Primary RPC rate limited for ${address}, trying fallback...`);
+        try {
+          basename = await fallbackBaseClient.readContract({
+            abi: L2ResolverAbi,
+            address: BASENAME_L2_RESOLVER_ADDRESS,
+            functionName: "name",
+            args: [addressReverseNode],
+          });
+        } catch (fallbackError) {
+          console.error(`Fallback RPC also failed for ${address}:`, fallbackError);
+          throw primaryError; // Re-throw original error
+        }
+      } else {
+        throw primaryError; // Re-throw if not rate limit error
+      }
+    }
+    
+    const result = basename ? (basename as Basename) : null;
+    
+    // Cache the result
+    basenameCache.set(cacheKey, {
+      basename: result,
+      timestamp: Date.now()
     });
-    if (basename) {
-      console.log(`Successfully resolved ${address} to ${basename}`);
-      return basename as Basename;
+    
+    if (result) {
+      console.log(`Successfully resolved ${address} to ${result}`);
+      return result;
     } else {
       console.log(`No basename found for address: ${address}`);
     }
   } catch (error) {
     console.error(`Error resolving basename for address ${address}:`, error);
+    // Cache failed lookups temporarily to prevent repeated failed calls
+    basenameCache.set(address.toLowerCase(), {
+      basename: null,
+      timestamp: Date.now()
+    });
   }
 }

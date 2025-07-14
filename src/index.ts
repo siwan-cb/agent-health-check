@@ -107,20 +107,20 @@ async function main() {
       }
     };
     
-    // Set up @bankr /help broadcasting every 30 seconds
+    // Set up /status /ping broadcasting every 2 minutes to reduce RPC load
     const broadcastInterval = setInterval(async () => {
       if (!broadcastingControl.isActive) {
         return; // Skip broadcasting if not active
       }
       
-      console.log("📢 Broadcasting @bankr /help to active conversations...");
+      console.log("📢 Broadcasting /status /ping to active conversations...");
       
       for (const conversationId of activeConversations) {
         try {
           const conversation = await client.conversations.getConversationById(conversationId);
           if (conversation) {
-            await conversation.send("@bankr @mamo.base.eth /help");
-            console.log(`✅ Sent @bankr /help to conversation: ${conversationId}`);
+            await conversation.send("/status");
+            console.log(`✅ Sent /status /ping to conversation: ${conversationId}`);
             
             // Find the senderInboxId for this conversation from message history
             const conversationMessages = messageHistory.filter(msg => msg.conversationId === conversationId);
@@ -130,12 +130,12 @@ async function main() {
             }
           }
         } catch (error) {
-          console.error(`❌ Failed to send @bankr /help to conversation ${conversationId}:`, error);
+          console.error(`❌ Failed to send /status /ping to conversation ${conversationId}:`, error);
           // Remove failed conversation from active set
           activeConversations.delete(conversationId);
         }
       }
-    }, 30000); // 30 seconds
+    }, 120000); // 2 minutes
     
     // Keep the bot running with proper error handling
     while (true) {

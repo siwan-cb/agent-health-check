@@ -57,13 +57,13 @@ export async function handleTextMessage(
     case command === '/start':
       if (broadcastingControl) {
         // Send immediate GM
-        await conversation.send("GM");
+        await conversation.send("/ping");
         
         // Enable broadcasting
         broadcastingControl.isActive = true;
         
         // Send confirmation message
-        await conversation.send("🚀 GM broadcasting started! I'll send GM every 30 seconds.");
+        await conversation.send("🚀 Ping broadcasting started! I'll send ping every 30 seconds.");
       } else {
         await conversation.send("❌ Broadcasting control not available.");
       }
@@ -72,7 +72,7 @@ export async function handleTextMessage(
     case command === '/stop':
       if (broadcastingControl) {
         broadcastingControl.isActive = false;
-        await conversation.send("🛑 GM broadcasting stopped.");
+        await conversation.send("🛑 Ping broadcasting stopped.");
       } else {
         await conversation.send("❌ Broadcasting control not available.");
       }
@@ -81,7 +81,7 @@ export async function handleTextMessage(
     case command === '/status':
       if (broadcastingControl) {
         const status = broadcastingControl.isActive ? "🟢 Active" : "🔴 Inactive";
-        const statusMessage = `📡 **Broadcasting Status**\n\nGM Broadcasting: ${status}`;
+        const statusMessage = `📡 **Broadcasting Status**\n\nPing Broadcasting: ${status}`;
         await conversation.send(statusMessage);
       } else {
         await conversation.send("❌ Broadcasting control not available.");
@@ -124,7 +124,7 @@ export async function handleTextMessage(
 
 🔢 Total Messages: ${totalMessages}
 👥 Unique Wallet Addresses: ${totalSenders}
-📡 GM Broadcasting: ${broadcastStatus}
+📡 Ping Broadcasting: ${broadcastStatus}
 
 🕐 Recent Messages:
 ${recentMessages.join('\n') || '  No messages yet'}
@@ -221,8 +221,8 @@ Total Agents: ${responses.length}`;
       }
       break;
 
-    case command.toLowerCase().includes('gm'):
-      await conversation.send("GM");
+    case command.toLowerCase().includes('ping'):
+      await conversation.send("ping");
       break;
 
     default:
