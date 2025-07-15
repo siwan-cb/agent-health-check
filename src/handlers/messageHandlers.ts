@@ -222,10 +222,6 @@ Total Agents: ${responses.length}`;
       }
       break;
 
-    case command.toLowerCase().includes('ping'):
-      await conversation.send("ping");
-      break;
-
     default:
       return;
   }

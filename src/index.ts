@@ -110,7 +110,7 @@ async function main() {
       }
     };
     
-    // Set up /status /ping broadcasting every 2 minutes to reduce RPC load
+    // Set up ping and GM broadcasting every 2 minutes to reduce RPC load
     const broadcastInterval = setInterval(async () => {
       if (!broadcastingControl.isActive) {
         return; // Skip broadcasting if not active
