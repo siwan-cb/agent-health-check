@@ -154,12 +154,12 @@ ${topSenders.join('\n') || '  No senders yet'}`;
           const diffMs = now.getTime() - lastResponseTime.getTime();
           const diffSeconds = Math.floor(diffMs / 1000);
           
-          if (diffSeconds < 30) {
-            return "🟢"; // Green - less than 30 seconds
-          } else if (diffSeconds < 60) {
-            return "🟡"; // Yellow - 30 seconds to 1 minute
+          if (diffSeconds < 150) {
+            return "🟢"; // Green - less than 2.5 minutes (allows buffer after 2min broadcast)
+          } else if (diffSeconds < 300) {
+            return "🟡"; // Yellow - 2.5 to 5 minutes (possible issues)
           } else {
-            return "🔴"; // Red - longer than 1 minute
+            return "🔴"; // Red - longer than 5 minutes (likely offline)
           }
         };
         
@@ -198,9 +198,9 @@ ${topSenders.join('\n') || '  No senders yet'}`;
 ${reportLines.join('\n')}
 
 Legend:
-🟢 Active (< 30s ago)
-🟡 Recent (30s - 1m ago)  
-🔴 Inactive (> 1m ago)
+🟢 Active (< 2.5m ago)
+🟡 Recent (2.5m - 5m ago)  
+🔴 Inactive (> 5m ago)
 
 Total Agents: ${responses.length}`;
 
